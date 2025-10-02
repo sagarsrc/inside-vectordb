@@ -15,15 +15,18 @@
 
 # %% Global Configuration
 DATA_ROOT = "../data"
-REPORTS_DIR = "../reports"
-DATASET_NAME = "scifact"
+REPORTS_DIR = "../reports/brute_force"
+DATASET_NAME = "msmarco"
+USE_SUBSET = True  # Use 1M subset for faster experimentation
+SUBSET_SIZE = "1M"  # Which subset to use
+SPLIT = "dev"  # For MS MARCO: 'dev' (6,980 queries) or 'test' (43 queries)
 
 # Sampling for faster testing
 N_CORPUS_SAMPLES = None  # Use entire corpus (None = all documents)
-N_QUERY_SAMPLES = 50  # Use subset of queries for testing
+N_QUERY_SAMPLES = 100  # Use subset of queries for testing (set to None for all 6,980)
 
 # Search parameters
-K_VALUES = [1, 5, 10, 20, 50]  # K values for Recall@K and Precision@K
+K_VALUES = [1, 5, 10, 20, 50, 100]  # K values for Recall@K and Precision@K
 
 # %% [markdown]
 # ## Import Dependencies
@@ -65,18 +68,39 @@ def load_embeddings(npz_path: str):
 
 
 # Load corpus and query embeddings
-corpus_emb_path = f"{DATA_ROOT}/{DATASET_NAME}_corpus_embeddings.npz"
-query_emb_path = f"{DATA_ROOT}/{DATASET_NAME}_query_embeddings.npz"
+subset_suffix = f"_{SUBSET_SIZE}" if USE_SUBSET else ""
+corpus_emb_path = f"{DATA_ROOT}/{DATASET_NAME}{subset_suffix}_corpus_embeddings.npz"
+query_emb_path = f"{DATA_ROOT}/{DATASET_NAME}{subset_suffix}_query_embeddings.npz"
 
 corpus_embeddings, corpus_ids = load_embeddings(corpus_emb_path)
 query_embeddings, query_ids = load_embeddings(query_emb_path)
 
 
 # %% Load Ground Truth (Qrels)
-def load_qrels(data_root: str, dataset_name: str, split: str = "test"):
+def load_qrels(data_root: str, dataset_name: str, split: str = "dev"):
     """Load ground truth relevance judgments."""
+    import json
+
     dataset_path = f"{data_root}/{dataset_name}"
-    _, queries, qrels = GenericDataLoader(data_folder=dataset_path).load(split=split)
+
+    # Load queries directly from file
+    queries_file = f"{dataset_path}/queries.jsonl"
+    queries = {}
+    with open(queries_file, "r") as f:
+        for line in f:
+            query = json.loads(line)
+            queries[query["_id"]] = query["text"]
+
+    # Load qrels directly from file
+    qrels_file = f"{dataset_path}/qrels/{split}.tsv"
+    qrels = {}
+    with open(qrels_file, "r") as f:
+        next(f)  # Skip header
+        for line in f:
+            query_id, doc_id, score = line.strip().split("\t")
+            if query_id not in qrels:
+                qrels[query_id] = {}
+            qrels[query_id][doc_id] = int(score)
 
     print(f"\nLoaded qrels for {len(qrels):,} queries")
     print(f"Total relevance judgments: {sum(len(docs) for docs in qrels.values()):,}")
@@ -84,7 +108,7 @@ def load_qrels(data_root: str, dataset_name: str, split: str = "test"):
     return queries, qrels
 
 
-queries_dict, qrels = load_qrels(DATA_ROOT, DATASET_NAME, split="test")
+queries_dict, qrels = load_qrels(DATA_ROOT, DATASET_NAME, split=SPLIT)
 
 # %% [markdown]
 # ## Sample Data for Testing
@@ -335,6 +359,9 @@ metrics_report = {
     "mrr": float(mrr_score),
     "metadata": {
         "dataset": DATASET_NAME,
+        "use_subset": USE_SUBSET,
+        "subset_size": SUBSET_SIZE if USE_SUBSET else None,
+        "split": SPLIT,
         "n_corpus_docs": len(corpus_id_list),
         "n_queries": len(query_id_list),
         "embedding_dimension": corpus_emb.shape[1],
