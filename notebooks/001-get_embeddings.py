@@ -105,10 +105,24 @@ def load_beir_dataset(
                     "metadata": doc.get("metadata", {}),
                 }
 
-        # Load queries and qrels normally (they remain unchanged)
-        _, queries, qrels = GenericDataLoader(data_folder=dataset_path).load(
-            split=split
-        )
+        # Load queries and qrels directly from files (without loading full corpus)
+        queries_file = os.path.join(dataset_path, "queries.jsonl")
+        qrels_file = os.path.join(dataset_path, "qrels", f"{split}.tsv")
+
+        queries = {}
+        with open(queries_file, "r") as f:
+            for line in f:
+                query = json.loads(line)
+                queries[query["_id"]] = query["text"]
+
+        qrels = {}
+        with open(qrels_file, "r") as f:
+            next(f)  # Skip header
+            for line in f:
+                query_id, doc_id, score = line.strip().split("\t")
+                if query_id not in qrels:
+                    qrels[query_id] = {}
+                qrels[query_id][doc_id] = int(score)
     else:
         # Load full dataset normally
         corpus, queries, qrels = GenericDataLoader(data_folder=dataset_path).load(
@@ -334,4 +348,14 @@ def display_summary():
 
 display_summary()
 
-# %%
+#%% [markdown]
+# Expected statistics after running 001-get_embeddings.py
+# Model: sentence-transformers/all-MiniLM-L6-v2
+# Embedding dimension: 384
+
+# Corpus embeddings: 1,000,000 documents
+# Query embeddings: 6,980 queries
+
+# Files saved:
+#   - ../data/msmarco_1M_corpus_embeddings.npz
+#   - ../data/msmarco_1M_query_embeddings.npz
