@@ -691,7 +691,7 @@ wheels = [
 ]
 
 [[package]]
-name = "inside-vectordb-hnsw"
+name = "inside-vectordb"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

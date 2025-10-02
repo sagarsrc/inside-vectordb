@@ -30,7 +30,7 @@ SUBSET_SIZE = "1M"
 SPLIT = "dev"
 
 # HNSW Parameters
-M = 16  # Max connections per node (higher = better recall, more memory)
+M = 32  # Max connections per node (higher = better recall, more memory)
 EF_CONSTRUCTION = 100  # Build-time accuracy (higher = better index quality, slower build)
 EF_SEARCH = 50  # Search-time accuracy (higher = better recall, slower search)
 
@@ -157,7 +157,7 @@ query_emb, query_id_list = sample_queries(
 # ## Build HNSW Index
 #
 # **Key Parameters:**
-# - `M = 16`: Each node connects to max 16 neighbors (trade-off: recall vs memory)
+# - `M = 32`: Each node connects to max 32 neighbors (trade-off: recall vs memory)
 # - `ef_construction = 100`: Build-time search width (higher = better quality, slower)
 #   - Reduced from 200 to 100 for **2x faster** build time with minimal quality loss
 #   - For 1M docs: ~3-5 minutes instead of 10+ minutes
@@ -583,16 +583,16 @@ print(f"  - hnswlib_metrics.json (full performance report)")
 # Dimension: 384
 
 # HNSW Parameters:
-#   M (max connections): 16
+#   M (max connections): 32
 #   ef_construction: 100
 #   num_threads: -1 (all cores)
 #   Space: cosine
 
 # Building index (batch size: 1,000)...
-#   Progress: 100.0% (1,000,000/1,000,000) - 375.7s elapsed
+#   Progress: 100.0% (1,000,000/1,000,000) - 512.8s elapsed
 
-# Index built in 375.71 seconds (6.3 minutes)
-# Build speed: 2662 vectors/sec
+# Index built in 512.76 seconds (8.5 minutes)
+# Build speed: 1950 vectors/sec
 
 # Index Statistics:
 #   Total elements: 1,000,000
@@ -608,12 +608,12 @@ print(f"  - hnswlib_metrics.json (full performance report)")
 # Demonstrating HNSW search with different ef values:
 # (Shows how HNSW trades off speed vs accuracy)
 
-# ef= 10: 0.09 ms/query
-#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.221 0.28  0.291])
-# ef= 50: 0.16 ms/query
-#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.221 0.28  0.291])
-# ef=200: 0.52 ms/query
-#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.221 0.28  0.291])
+# ef= 10: 0.13 ms/query
+#   Query 0 top-3 neighbors: [355845 319197 154322] (distances: [0.221 0.231 0.282])
+# ef= 50: 0.22 ms/query
+#   Query 0 top-3 neighbors: [355845 319197 154322] (distances: [0.221 0.231 0.282])
+# ef=200: 0.71 ms/query
+#   Query 0 top-3 neighbors: [355845 319197 154322] (distances: [0.221 0.231 0.282])
 
 # ** HNSW Properties Demonstrated **
 # - Lower ef → Faster search (explores fewer nodes)
@@ -632,9 +632,9 @@ print(f"  - hnswlib_metrics.json (full performance report)")
 #   K (neighbors to retrieve): 100
 
 # Searching 100 queries...
-# Search completed in 0.04 seconds
-# Queries per second: 2274.8
-# Avg latency per query: 0.44 ms
+# Search completed in 0.05 seconds
+# Queries per second: 2165.7
+# Avg latency per query: 0.46 ms
 # ```
 
 # ```
@@ -642,10 +642,10 @@ print(f"  - hnswlib_metrics.json (full performance report)")
 # HNSW DEMO COMPLETE
 # ================================================================================
 
-# Index: 1,000,000 vectors in 375.7s
-# Search: 100 queries in 0.04s
-# Recall@10: 0.7583
-# Latency: 0.44 ms/query
+# Index: 1,000,000 vectors in 512.8s
+# Search: 100 queries in 0.05s
+# Recall@10: 0.7433
+# Latency: 0.46 ms/query
 
 # Results saved to ../reports/hnswlib/
 #   - ef_tradeoff.png (parameter tuning analysis)
