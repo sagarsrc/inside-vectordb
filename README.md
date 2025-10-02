@@ -1,6 +1,6 @@
 # Inside Vector Databases: HNSW Performance Analysis
 
-A comprehensive benchmark comparing vector search algorithms on large-scale datasets, focusing on the speed vs accuracy trade-offs in approximate nearest neighbor search.
+A benchmark comparing brute-force, HNSWlib, and FAISS (HNSW index) vector search on MS MARCO 1M dataset to demonstrate speed vs accuracy trade-offs.
 
 ## Overview
 
@@ -26,17 +26,17 @@ This experiment evaluates different vector search methods (Brute-force, HNSW, FA
 #### Search Latency Comparison
 ![Latency Comparison](reports/summary/latency_comparison.png)
 
-FAISS achieves **sub-millisecond queries** while maintaining 95% of brute-force recall quality.
+FAISS achieves sub-millisecond queries while maintaining 95% of brute-force recall.
 
 #### Throughput (Queries Per Second)
 ![QPS Comparison](reports/summary/qps_comparison.png)
 
-FAISS processes **11,805 queries/second** - essential for production search systems.
+FAISS processes 11,805 queries/second on this dataset.
 
 #### Recall vs Speed Trade-off
 ![Speed vs Accuracy](reports/summary/speed_vs_accuracy.png)
 
-The fundamental trade-off: HNSW methods sacrifice ~5-7% recall for 1000-8000x speed improvement.
+HNSW methods sacrifice ~5-7% recall for 1000-8000x speed improvement.
 
 #### Recall Comparison
 ![Recall Comparison](reports/summary/recall_comparison.png)
@@ -95,8 +95,6 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
 - **Build Time**: Index construction time (one-time cost)
 
 ## Notebooks
-
-The experiment is organized as a series of Jupyter-style notebooks:
 
 1. **[000-get_data.py](notebooks/000-get_data.py)**
    - Downloads BEIR benchmark datasets (MS MARCO, SciFact)
@@ -191,26 +189,23 @@ Results are saved to `reports/` directory.
 ### When to Use Each Method
 
 **Brute-Force:**
-- ✅ Small datasets (<10K documents)
-- ✅ Need 100% recall guarantee
-- ✅ Offline/batch processing
-- ❌ Real-time search at scale
+- Small datasets (<10K documents)
+- Need 100% recall guarantee
+- Offline/batch processing
 
 **HNSWlib:**
-- ✅ Production search systems
-- ✅ Million-scale datasets
-- ✅ Need <5ms latency
-- ✅ Can tolerate 5-10% recall loss
+- Production search systems
+- Million-scale datasets
+- Balance of speed and accuracy
 
 **FAISS:**
-- ✅ Billion-scale datasets
-- ✅ Need <1ms latency
-- ✅ GPU acceleration available
-- ✅ Best throughput (10K+ QPS)
+- Large-scale deployments
+- Need maximum throughput
+- GPU acceleration available
 
-### The 1000x Rule
+### Speed vs Accuracy Trade-off
 
-On datasets >100K documents, HNSW methods provide **1000-10000x speedup** compared to unoptimized brute-force search while maintaining **>90% recall**. This speedup is due to HNSW's O(log n) complexity vs brute-force O(n). Note that optimized exact search (e.g., FAISS Flat) would reduce this gap but HNSW remains essential for production scale.
+HNSW methods achieve 1000x+ speedup over brute-force search by sacrificing ~5-7% recall. This is the fundamental trade-off in approximate nearest neighbor search - dramatic speed improvements at the cost of slight accuracy reduction.
 
 ## Project Structure
 
