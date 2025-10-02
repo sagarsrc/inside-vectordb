@@ -166,3 +166,13 @@ dependencies = [
     "xxhash==3.5.0",
     "yarl==1.20.1",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+torchaudio = { index = "pytorch-cu121" }
+torchvision = { index = "pytorch-cu121" }
