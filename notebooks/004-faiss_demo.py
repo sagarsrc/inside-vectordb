@@ -556,3 +556,87 @@ print(f"Latency: {search_time * 1000 / len(query_id_list):.2f} ms/query")
 print(f"\nResults saved to {FAISS_REPORTS}/")
 print(f"  - ef_tradeoff.png (parameter tuning analysis)")
 print(f"  - faiss_hnsw_metrics.json (full performance report)")
+
+# %% [markdown]
+# expected outputs (might vary with different machine and parameters)
+
+# ```
+# ================================================================================
+# BUILDING FAISS HNSW INDEX
+# ================================================================================
+
+# Dataset: msmarco (1M subset)
+# Corpus size: 1,000,000 documents
+# Dimension: 384
+
+# FAISS HNSW Parameters:
+#   M (connections per layer): 32
+#   efConstruction: 100
+#   Metric: Inner Product (for normalized vectors = cosine)
+
+# Normalizing embeddings for cosine similarity...
+
+# Building index (batch size: 1,000)...
+#   Progress: 100.0% (1,000,000/1,000,000) - 380.0s elapsed
+
+# Index built in 380.01 seconds (6.3 minutes)
+# Build speed: 2632 vectors/sec
+
+# Index Statistics:
+#   Total elements: 1,000,000
+
+# Index saved to: ../data/index/faiss_index.bin
+# ```
+
+# ```
+# ================================================================================
+# ANALYZING FAISS HNSW INDEX BEHAVIOR
+# ================================================================================
+
+# Demonstrating FAISS HNSW search with different efSearch values:
+# (Shows how efSearch trades off speed vs accuracy)
+
+# efSearch= 10: 2.28 ms/query
+#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.441 0.561 0.583])
+# efSearch= 50: 20.16 ms/query
+#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.441 0.561 0.583])
+# efSearch=200: 19.95 ms/query
+#   Query 0 top-3 neighbors: [927045 489818 193960] (distances: [0.441 0.561 0.583])
+
+# ** FAISS HNSW Properties **
+# - Lower efSearch → Faster search (explores fewer nodes)
+# - Higher efSearch → More accurate (explores more of the graph)
+# - FAISS uses inner product metric (equivalent to cosine after normalization)
+# ```
+
+# ```
+
+# ================================================================================
+# FAISS HNSW SEARCH
+# ================================================================================
+
+# Search parameters:
+#   efSearch: 50
+#   K (neighbors to retrieve): 100
+
+# Searching 100 queries...
+# Search completed in 0.01 seconds
+# Queries per second: 11805.0
+# Avg latency per query: 0.08 ms
+
+#```
+
+# ```
+# ================================================================================
+# FAISS HNSW BENCHMARK COMPLETE
+# ================================================================================
+
+# Index: 1,000,000 vectors built in 380.0s
+# Search: 100 queries in 0.01s
+# Recall@10: 0.7683
+# Latency: 0.08 ms/query
+
+# Results saved to ../reports/faiss/
+#   - ef_tradeoff.png (parameter tuning analysis)
+#   - faiss_hnsw_metrics.json (full performance report)
+# ```
