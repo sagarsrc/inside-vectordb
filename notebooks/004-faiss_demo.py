@@ -1,19 +1,17 @@
 # %% [markdown]
-# # FAISS Demo: CPU vs GPU Benchmark
+# # FAISS Demo: Fast Approximate Nearest Neighbor Search
 #
-# This notebook demonstrates **FAISS (Facebook AI Similarity Search)** with HNSW index on both CPU and GPU.
+# This notebook demonstrates **FAISS (Facebook AI Similarity Search)** with HNSW index.
 #
 # **What You'll Learn:**
 # - How FAISS HNSW index works
 # - Key parameters: M, efConstruction, efSearch
-# - **CPU vs GPU performance comparison**
-# - GPU acceleration benefits for search
+# - Performance comparison vs hnswlib
 #
 # **Why FAISS?**
 # - Production-ready library from Meta
 # - Multiple index types (HNSW, IVF, PQ, etc.)
 # - Highly optimized C++ backend
-# - **GPU support for massive speedups**
 # - Used by Meta, Uber, Spotify, and others
 
 # %% [markdown]
@@ -62,13 +60,10 @@ from utils import (
     save_metrics_report,
 )
 
-print(f"FAISS version: {faiss.__version__}")
-
-# Check GPU availability
-GPU_AVAILABLE = faiss.get_num_gpus() > 0
-print(f"GPU available: {GPU_AVAILABLE}")
-if GPU_AVAILABLE:
-    print(f"Number of GPUs: {faiss.get_num_gpus()}")
+try:
+    print(f"FAISS version: {faiss.__version__}")
+except AttributeError:
+    print("FAISS imported successfully")
 
 # Create reports directory structure
 FAISS_REPORTS = f"{REPORTS_DIR}/faiss"
@@ -158,7 +153,7 @@ query_emb, query_id_list = sample_queries(
 
 
 # %% [markdown]
-# ## Build FAISS HNSW Index (CPU)
+# ## Build FAISS HNSW Index
 #
 # **Key Parameters:**
 # - `M = 32`: Number of connections per node (FAISS default is higher than hnswlib)
@@ -171,8 +166,6 @@ query_emb, query_id_list = sample_queries(
 # - Batch insertion (50K vectors/batch) for better memory locality
 # - Progress tracking to monitor build status
 # - L2 normalization for accurate cosine similarity
-#
-# **Note:** Index building happens on CPU. GPU is used only for search operations.
 
 
 # %% FAISS Index Building
@@ -203,7 +196,7 @@ def build_faiss_hnsw_index(embeddings, m, ef_construction):
     faiss.normalize_L2(embeddings_normalized)
 
     # Add items in batches with progress tracking
-    batch_size = 50000
+    batch_size = 1000
     start_time = time.time()
 
     print(f"\nBuilding index (batch size: {batch_size:,})...")
@@ -235,10 +228,10 @@ if index_file.exists():
     print(f"{'=' * 80}\n")
     print(f"Loading index from: {index_file}")
 
-    index_cpu = faiss.read_index(str(index_file))
+    index = faiss.read_index(str(index_file))
 
     print(f"Index loaded successfully")
-    print(f"  Total elements: {index_cpu.ntotal:,}")
+    print(f"  Total elements: {index.ntotal:,}")
 
     # Normalize embeddings (needed for search later)
     corpus_embeddings_normalized = corpus_embeddings.copy()
@@ -246,60 +239,22 @@ if index_file.exists():
 
     build_time = 0  # No build time since we loaded from disk
 else:
-    index_cpu, build_time, corpus_embeddings_normalized = build_faiss_hnsw_index(
+    index, build_time, corpus_embeddings_normalized = build_faiss_hnsw_index(
         corpus_embeddings, M, EF_CONSTRUCTION
     )
 
     # Save index to disk
     Path(INDEX_DIR).mkdir(parents=True, exist_ok=True)
-    faiss.write_index(index_cpu, str(index_file))
+    faiss.write_index(index, str(index_file))
     print(f"\nIndex saved to: {index_file}")
 
 # %% [markdown]
-# ## Transfer Index to GPU
-#
-# **GPU Acceleration:**
-# - FAISS can transfer CPU-built indexes to GPU for faster search
-# - GPU excels at **search operations** (10-50x speedup)
-# - Index building still happens on CPU (CPU is faster for construction)
-# - GPU memory must fit the index + query batches
-
-
-# %% GPU Transfer
-def transfer_to_gpu(index_cpu):
-    """Transfer CPU index to GPU."""
-    if not GPU_AVAILABLE:
-        print("\nGPU not available - skipping GPU benchmark")
-        return None
-
-    print(f"\n{'=' * 80}")
-    print(f"TRANSFERRING INDEX TO GPU")
-    print(f"{'=' * 80}\n")
-
-    # Create GPU resources
-    res = faiss.StandardGpuResources()
-
-    # Transfer index to GPU 0
-    start_time = time.time()
-    index_gpu = faiss.index_cpu_to_gpu(res, 0, index_cpu)
-    transfer_time = time.time() - start_time
-
-    print(f"Index transferred to GPU in {transfer_time:.2f} seconds")
-    print(f"GPU index total elements: {index_gpu.ntotal:,}")
-
-    return index_gpu
-
-
-index_gpu = transfer_to_gpu(index_cpu)
-
-
-# %% [markdown]
-# ## Analyze Search Behavior (CPU vs GPU)
+# ## Analyze Search Behavior
 
 
 # %% Search Behavior Analysis
-def analyze_search_behavior(devices_to_test, query_emb):
-    """Analyze FAISS search behavior with different efSearch values on available devices."""
+def analyze_search_behavior(index, query_emb):
+    """Analyze FAISS search behavior with different efSearch values."""
     # Normalize query embeddings
     query_emb_normalized = query_emb.copy()
     faiss.normalize_L2(query_emb_normalized)
@@ -308,53 +263,49 @@ def analyze_search_behavior(devices_to_test, query_emb):
     ef_test_values = [10, 50, 200]
     k_test = 10
 
+    print(f"\n{'=' * 80}")
+    print(f"ANALYZING FAISS HNSW INDEX BEHAVIOR")
+    print(f"{'=' * 80}\n")
+
     print("Demonstrating FAISS HNSW search with different efSearch values:")
     print("(Shows how efSearch trades off speed vs accuracy)\n")
 
-    for device_name, index in devices_to_test:
-        print(f"\n{'=' * 80}")
-        print(f"{device_name} SEARCH BEHAVIOR")
-        print(f"{'=' * 80}\n")
+    for ef_val in ef_test_values:
+        index.hnsw.efSearch = ef_val
 
-        for ef_val in ef_test_values:
-            index.hnsw.efSearch = ef_val
+        # Time search
+        start = time.time()
+        distances, labels = index.search(sample_queries, k_test)
+        search_time = (time.time() - start) * 1000 / len(sample_queries)
 
-            # Time search
-            start = time.time()
-            distances, labels = index.search(sample_queries, k_test)
-            search_time = (time.time() - start) * 1000 / len(sample_queries)
-
-            print(f"efSearch={ef_val:3d}: {search_time:.2f} ms/query ({device_name})")
-            print(
-                f"  Query 0 top-3 neighbors: {labels[0][:3]} (distances: {distances[0][:3].round(3)})"
-            )
+        print(f"efSearch={ef_val:3d}: {search_time:.2f} ms/query")
+        print(
+            f"  Query 0 top-3 neighbors: {labels[0][:3]} (distances: {distances[0][:3].round(3)})"
+        )
 
     print("\n** FAISS HNSW Properties **")
     print("- Lower efSearch → Faster search (explores fewer nodes)")
     print("- Higher efSearch → More accurate (explores more of the graph)")
-    if len(devices_to_test) > 1:
-        print("- GPU provides 10-50x speedup for search operations")
     print("- FAISS uses inner product metric (equivalent to cosine after normalization)")
 
 
-analyze_search_behavior(devices_to_test, query_emb)
+analyze_search_behavior(index, query_emb)
 
 
 # %% [markdown]
-# ## Search with FAISS (CPU vs GPU Benchmark)
+# ## Search with FAISS
 
 
 # %% FAISS Search
-def perform_faiss_search(index, query_emb, query_id_list, corpus_ids, ef_search, k_max, device="CPU"):
+def perform_faiss_search(index, query_emb, query_id_list, corpus_ids, ef_search, k_max):
     """Perform FAISS HNSW search on all queries."""
     print(f"\n{'=' * 80}")
-    print(f"FAISS HNSW SEARCH ({device})")
+    print(f"FAISS HNSW SEARCH")
     print(f"{'=' * 80}\n")
 
     print(f"Search parameters:")
     print(f"  efSearch: {ef_search}")
     print(f"  K (neighbors to retrieve): {k_max}")
-    print(f"  Device: {device}")
 
     # Set search parameter
     index.hnsw.efSearch = ef_search
@@ -383,44 +334,9 @@ def perform_faiss_search(index, query_emb, query_id_list, corpus_ids, ef_search,
     return all_results, search_time
 
 
-# Benchmark both CPU and GPU
-devices_to_test = [("CPU", index_cpu)]
-if index_gpu is not None:
-    devices_to_test.append(("GPU", index_gpu))
-
-search_results = {}
-for device_name, index in devices_to_test:
-    results, search_time = perform_faiss_search(
-        index, query_emb, query_id_list, corpus_ids, EF_SEARCH, max(K_VALUES), device=device_name
-    )
-    search_results[device_name] = {
-        "results": results,
-        "search_time": search_time
-    }
-
-# Extract results for convenience
-all_results_cpu = search_results["CPU"]["results"]
-search_time_cpu = search_results["CPU"]["search_time"]
-
-if "GPU" in search_results:
-    all_results_gpu = search_results["GPU"]["results"]
-    search_time_gpu = search_results["GPU"]["search_time"]
-
-    # Compare speedup
-    print(f"\n{'=' * 80}")
-    print(f"CPU vs GPU SPEEDUP")
-    print(f"{'=' * 80}\n")
-    speedup = search_time_cpu / search_time_gpu
-    print(f"CPU search time: {search_time_cpu:.2f}s")
-    print(f"GPU search time: {search_time_gpu:.2f}s")
-    print(f"GPU speedup: {speedup:.1f}x faster")
-else:
-    all_results_gpu = None
-    search_time_gpu = None
-
-# Use CPU results for metrics evaluation
-all_results = all_results_cpu
-search_time = search_time_cpu
+all_results, search_time = perform_faiss_search(
+    index, query_emb, query_id_list, corpus_ids, EF_SEARCH, max(K_VALUES)
+)
 
 
 # %% [markdown]
@@ -469,14 +385,14 @@ recall_scores, precision_scores, mrr_score = calculate_metrics(
 
 
 # %% [markdown]
-# ## Parameter Sensitivity Analysis (CPU vs GPU)
+# ## Parameter Sensitivity Analysis
 
 
 # %% Parameter Analysis
-def analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels, device="CPU"):
+def analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels):
     """Analyze efSearch parameter sensitivity."""
     print(f"\n{'=' * 80}")
-    print(f"PARAMETER SENSITIVITY: efSearch ({device})")
+    print(f"PARAMETER SENSITIVITY: efSearch")
     print(f"{'=' * 80}\n")
 
     # Normalize queries
@@ -517,7 +433,6 @@ def analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels, dev
                 "recall@10": recall,
                 "search_time": search_time,
                 "qps": len(query_emb) / search_time,
-                "device": device,
             }
         )
 
@@ -528,63 +443,39 @@ def analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels, dev
     return ef_results
 
 
-# Parameter analysis for both devices
-ef_results_all = {}
-for device_name, index in devices_to_test:
-    ef_results = analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels, device=device_name)
-    ef_results_all[device_name] = ef_results
-
-# Extract for convenience
-ef_results_cpu = ef_results_all["CPU"]
-ef_results_gpu = ef_results_all.get("GPU", [])
-
-# Use CPU results for main metrics
-ef_results = ef_results_cpu
+ef_results = analyze_ef_parameter(index, query_emb, query_id_list, corpus_ids, qrels)
 
 
 # %% Plot Results
-def plot_ef_tradeoff(ef_results_cpu, ef_results_gpu, output_dir):
-    """Plot efSearch vs recall and latency for CPU and GPU."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+def plot_ef_tradeoff(ef_results, output_dir):
+    """Plot efSearch vs recall and latency."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
-    # CPU data
-    efs_cpu = [r["ef"] for r in ef_results_cpu]
-    recalls_cpu = [r["recall@10"] for r in ef_results_cpu]
-    times_cpu = [r["search_time"] * 1000 / N_QUERY_SAMPLES for r in ef_results_cpu]
+    efs = [r["ef"] for r in ef_results]
+    recalls = [r["recall@10"] for r in ef_results]
+    times = [r["search_time"] * 1000 / N_QUERY_SAMPLES for r in ef_results]
 
-    ax1.plot(efs_cpu, recalls_cpu, marker="o", linewidth=2, markersize=8, color="blue", label="CPU")
-    ax2.plot(efs_cpu, times_cpu, marker="o", linewidth=2, markersize=8, color="blue", label="CPU")
-
-    # GPU data (if available)
-    if ef_results_gpu:
-        efs_gpu = [r["ef"] for r in ef_results_gpu]
-        recalls_gpu = [r["recall@10"] for r in ef_results_gpu]
-        times_gpu = [r["search_time"] * 1000 / N_QUERY_SAMPLES for r in ef_results_gpu]
-
-        ax1.plot(efs_gpu, recalls_gpu, marker="s", linewidth=2, markersize=8, color="green", label="GPU")
-        ax2.plot(efs_gpu, times_gpu, marker="s", linewidth=2, markersize=8, color="green", label="GPU")
-
+    ax1.plot(efs, recalls, marker="o", linewidth=2, markersize=8)
     ax1.set_xlabel("efSearch", fontsize=12)
     ax1.set_ylabel("Recall@10", fontsize=12)
-    ax1.set_title("efSearch vs Recall@10 (CPU vs GPU)", fontsize=13, fontweight="bold")
-    ax1.legend()
+    ax1.set_title("efSearch vs Recall@10", fontsize=13, fontweight="bold")
     ax1.grid(True, alpha=0.3)
 
+    ax2.plot(efs, times, marker="o", color="orange", linewidth=2, markersize=8)
     ax2.set_xlabel("efSearch", fontsize=12)
     ax2.set_ylabel("Latency (ms per query)", fontsize=12)
-    ax2.set_title("efSearch vs Search Latency (CPU vs GPU)", fontsize=13, fontweight="bold")
-    ax2.legend()
+    ax2.set_title("efSearch vs Search Latency", fontsize=13, fontweight="bold")
     ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    output_path = f"{output_dir}/ef_tradeoff_cpu_vs_gpu.png"
+    output_path = f"{output_dir}/ef_tradeoff.png"
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
 
     print(f"\nPlot saved to: {output_path}")
 
 
-plot_ef_tradeoff(ef_results_cpu, ef_results_gpu, FAISS_REPORTS)
+plot_ef_tradeoff(ef_results, FAISS_REPORTS)
 
 
 # %% [markdown]
@@ -594,28 +485,26 @@ plot_ef_tradeoff(ef_results_cpu, ef_results_gpu, FAISS_REPORTS)
 # %% Save Report
 def save_report(
     build_time,
-    search_time_cpu,
-    search_time_gpu,
+    search_time,
     recall_scores,
     precision_scores,
     mrr_score,
-    ef_results_cpu,
-    ef_results_gpu,
+    ef_results,
     output_dir,
 ):
     """Save metrics report to JSON."""
     dim = corpus_embeddings.shape[1]
 
     metrics_report = {
-        "method": "faiss_hnsw_cpu_vs_gpu",
-        "search_latency_cpu": {
-            "total_seconds": float(search_time_cpu),
-            "queries_per_second": float(len(query_id_list) / search_time_cpu),
-            "avg_latency_ms": float(search_time_cpu * 1000 / len(query_id_list)),
+        "method": "faiss_hnsw",
+        "search_latency": {
+            "total_seconds": float(search_time),
+            "queries_per_second": float(len(query_id_list) / search_time),
+            "avg_latency_ms": float(search_time * 1000 / len(query_id_list)),
         },
         "build_latency": {
             "total_seconds": float(build_time),
-            "vectors_per_second": float(len(corpus_ids) / build_time),
+            "vectors_per_second": float(len(corpus_ids) / build_time) if build_time > 0 else None,
         },
         "recall": {str(k): float(v) for k, v in recall_scores.items()},
         "precision": {str(k): float(v) for k, v in precision_scores.items()},
@@ -628,73 +517,42 @@ def save_report(
             "n_corpus_docs": len(corpus_ids),
             "n_queries": len(query_id_list),
             "embedding_dimension": dim,
-            "gpu_available": GPU_AVAILABLE,
             "faiss_params": {
                 "M": M,
                 "efConstruction": EF_CONSTRUCTION,
                 "efSearch": EF_SEARCH,
             },
         },
-        "ef_sensitivity_cpu": ef_results_cpu,
+        "ef_sensitivity": ef_results,
     }
 
-    # Add GPU metrics if available
-    if search_time_gpu is not None:
-        metrics_report["search_latency_gpu"] = {
-            "total_seconds": float(search_time_gpu),
-            "queries_per_second": float(len(query_id_list) / search_time_gpu),
-            "avg_latency_ms": float(search_time_gpu * 1000 / len(query_id_list)),
-        }
-        metrics_report["gpu_speedup"] = float(search_time_cpu / search_time_gpu)
-        metrics_report["ef_sensitivity_gpu"] = ef_results_gpu
-
-    report_path = save_metrics_report("faiss_hnsw_cpu_vs_gpu", metrics_report, output_dir)
+    report_path = save_metrics_report("faiss_hnsw", metrics_report, output_dir)
     print(f"\nMetrics report saved to: {report_path}")
 
 
 save_report(
     build_time,
-    search_time_cpu,
-    search_time_gpu,
+    search_time,
     recall_scores,
     precision_scores,
     mrr_score,
-    ef_results_cpu,
-    ef_results_gpu,
+    ef_results,
     FAISS_REPORTS,
 )
 
 
 # %% [markdown]
-# ## Summary
-#
-# **FAISS CPU vs GPU:**
-# - ✅ Same index quality on CPU and GPU (identical recall)
-# - ✅ GPU provides 10-50x search speedup
-# - ✅ Index building happens on CPU (faster than GPU for construction)
-# - ✅ Production-ready (used at Meta scale)
-#
-# **Key Takeaways:**
-# - **GPU Speedup**: GPU excels at search operations, not index building
-# - **M**: Number of connections (FAISS default 32 vs hnswlib 16)
-# - **efConstruction**: Build quality (100 is good balance of speed/quality)
-# - **efSearch**: Search-time accuracy trade-off
-# - GPU is ideal for production serving with high query throughput
-
-
 # %% Summary
 print(f"\n{'=' * 80}")
-print(f"FAISS CPU vs GPU BENCHMARK COMPLETE")
+print(f"FAISS HNSW BENCHMARK COMPLETE")
 print(f"{'=' * 80}\n")
-print(f"Index: {len(corpus_ids):,} vectors in {build_time:.1f}s (CPU)")
-print(f"Search CPU: {len(query_id_list):,} queries in {search_time_cpu:.2f}s")
-if search_time_gpu is not None:
-    print(f"Search GPU: {len(query_id_list):,} queries in {search_time_gpu:.2f}s")
-    print(f"GPU Speedup: {search_time_cpu / search_time_gpu:.1f}x faster")
-print(f"\nRecall@10: {recall_scores[10]:.4f}")
-print(f"CPU Latency: {search_time_cpu * 1000 / len(query_id_list):.2f} ms/query")
-if search_time_gpu is not None:
-    print(f"GPU Latency: {search_time_gpu * 1000 / len(query_id_list):.2f} ms/query")
+if build_time > 0:
+    print(f"Index: {len(corpus_ids):,} vectors built in {build_time:.1f}s")
+else:
+    print(f"Index: {len(corpus_ids):,} vectors (loaded from disk)")
+print(f"Search: {len(query_id_list):,} queries in {search_time:.2f}s")
+print(f"Recall@10: {recall_scores[10]:.4f}")
+print(f"Latency: {search_time * 1000 / len(query_id_list):.2f} ms/query")
 print(f"\nResults saved to {FAISS_REPORTS}/")
-print(f"  - ef_tradeoff_cpu_vs_gpu.png (CPU vs GPU comparison)")
-print(f"  - faiss_hnsw_cpu_vs_gpu_metrics.json (full performance report)")
+print(f"  - ef_tradeoff.png (parameter tuning analysis)")
+print(f"  - faiss_hnsw_metrics.json (full performance report)")
