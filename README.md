@@ -13,11 +13,13 @@ This experiment evaluates different vector search methods (Brute-force, HNSW, FA
 
 ### Performance Summary
 
-| Method | Latency | Throughput | Recall@10 | Speedup vs Brute-Force |
-|--------|---------|------------|-----------|------------------------|
-| **Brute Force** | 699.43 ms | 1.4 QPS | 0.8100 | 1x (baseline) |
-| **HNSWlib** | 0.44 ms | 2,275 QPS | 0.7583 (93.6%) | **1,591x faster** |
-| **FAISS** | 0.08 ms | 11,805 QPS | 0.7683 (94.9%) | **8,257x faster** |
+| Method | Implementation | Latency | Throughput | Recall@10 | Speedup vs Brute-Force |
+|--------|---------------|---------|------------|-----------|------------------------|
+| **Brute Force** | sklearn (unoptimized)* | 699.43 ms | 1.4 QPS | 0.8100 | 1x (baseline) |
+| **HNSWlib** | C++ with Python bindings | 0.44 ms | 2,275 QPS | 0.7583 (93.6%) | **1,591x faster** |
+| **FAISS HNSW** | IndexHNSWFlat | 0.08 ms | 11,805 QPS | 0.7683 (94.9%) | **8,257x faster** |
+
+*Note: Brute force uses unoptimized sklearn cosine_similarity. Production implementations would be faster but still O(n).
 
 ### Visualizations
 
@@ -66,6 +68,7 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
 ### Methods Evaluated
 
 1. **Brute-Force (Exact Search)**
+   - Implementation: sklearn cosine_similarity (unoptimized NumPy)
    - Computes cosine similarity with all documents
    - O(n) complexity, 100% accurate
    - Baseline: 0.81 Recall@10, 699.43ms latency
@@ -77,8 +80,9 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
    - **Index build**: 375.7s (~6.3 minutes)
 
 3. **FAISS HNSW**
+   - **Implementation**: faiss.IndexHNSWFlat (optimized C++ with SIMD)
    - **Parameters**: M=32, ef_construction=100, ef_search=50
-   - Optimized HNSW implementation
+   - Facebook's optimized HNSW implementation
    - **Results**: 0.7683 Recall@10 (94.9% of brute-force), 0.08ms latency
    - **Index build**: 380.0s (~6.3 minutes)
 
@@ -206,7 +210,7 @@ Results are saved to `reports/` directory.
 
 ### The 1000x Rule
 
-On datasets >100K documents, HNSW methods provide **1000-10000x speedup** while maintaining **>90% recall**. This makes them essential for production search systems.
+On datasets >100K documents, HNSW methods provide **1000-10000x speedup** compared to unoptimized brute-force search while maintaining **>90% recall**. This speedup is due to HNSW's O(log n) complexity vs brute-force O(n). Note that optimized exact search (e.g., FAISS Flat) would reduce this gap but HNSW remains essential for production scale.
 
 ## Project Structure
 
@@ -234,3 +238,8 @@ inside-vectordb-hnsw/
 - [FAISS](https://github.com/facebookresearch/faiss) - Facebook AI similarity search
 - [Sentence Transformers](https://www.sbert.net/) - State-of-the-art text embeddings
 
+----
+
+**Author**: [Sagar Sarkale](https://www.linkedin.com/in/sagar-sarkale/)
+
+**Blog link**: [Inside Vector DB](https://sagarsarkale.com/genai/inside-vectordb/)
