@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv pip:*)",
+      "Bash(mkdir:*)",
+      "WebSearch(*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

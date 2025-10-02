@@ -4,40 +4,51 @@
 # This notebook downloads and showcases BEIR benchmark datasets for vector database evaluation.
 # BEIR provides text corpus, queries, and ground truth relevance judgments (qrels).
 #
-# ## SciFact Dataset
+# ## MS MARCO Dataset
 #
-# **Purpose**: Scientific claim verification - determine if scientific claims are supported by research papers
+# **Purpose**: Large-scale passage ranking - retrieve relevant passages for real user search queries
 #
 # **Dataset Structure**:
-# - **Corpus**: ~5,183 scientific paper abstracts from biomedical domain
+# - **Corpus**: 8,841,823 passages from web documents
 #   - Each document has: `doc_id`, `title`, `text`
-# - **Queries**: 300 scientific claims to verify
-#   - Each query is a claim statement (e.g., "Microstructural development of newborn cerebral white matter can be assessed in vivo")
-# - **Qrels**: Ground truth relevance judgments
-#   - Maps which papers support/refute each claim
-#   - Relevance scores: 1 (relevant) or higher
+# - **Queries**: Total 509,962 queries across all splits
+#   - **dev split**: 6,980 queries with 7,437 relevance judgments
+#   - **test split**: 43 queries with 9,260 relevance judgments (TREC-DL 2019 - many judgments per query)
+#   - **train split**: 532,751 query-document pairs
+#   - Each query is a natural language question (e.g., "what is the temperature in mars")
+# - **Qrels**: Ground truth relevance judgments with **graded relevance**
+#   - Maps which passages are relevant for each query
+#   - **Relevance scores**: 0 (not relevant), 1 (relevant), 2 (highly relevant/perfect match)
+#   - Unlike binary relevance (SciFact), MS MARCO uses graded judgments for nuanced evaluation
 #
 # **Example Corpus Entry**:
 # ```
-# [Document 1] ID: 4983
-# Title: Microstructural development of human newborn cerebral white matter assessed in vivo by diffusion tensor magnetic resonance imaging.
-# Text: Alterations of the architecture of cerebral white matter in the developing human brain can affect cortical development and result in functional disabilities. A line scan diffusion-weighted magnetic re...
+# [Document 1] ID: 0
+# Title: (empty string - many MS MARCO passages don't have titles)
+# Text: The presence of communication amid scientific minds was equally important to the success of the Manhattan Project as scientific intellect was. The only cloud hanging over the impressive achievement of the atomic researchers and engineers is what their success truly meant; hundreds of thousands of innocent lives obliterated.
+# ```
+#
+# **Example Query**:
+# ```
+# Query ID: 1185869
+# Text: what was the immediate impact of the success of the manhattan project?
 # ```
 #
 # **Fields Explanation**:
-
-# - `doc_id` (str): Unique document identifier (e.g., "4983")
-# - `title` (str): Paper title
-# - `text` (str): Abstract text (full content for retrieval)
+# - `doc_id` (str): Unique document identifier (e.g., "0")
+# - `title` (str): Passage title (often empty in MS MARCO)
+# - `text` (str): Passage text (full content for retrieval)
+# - `query_id` (str): Unique query identifier
+# - `query text` (str): Natural language search query
 #
-# **Use Case**: Test if vector DB can retrieve relevant scientific evidence for claims
+# **Use Case**: Test if vector DB can retrieve relevant passages for real-world search queries at scale
 
 # %% [markdown]
 # ## Configuration
 
 # %% Global Configuration
-DATA_ROOT = "/Users/sagar/not-work/inside-vectordb-hnsw/data"
-DATASET_NAME = "scifact"  # Small dataset: ~5K docs, 300 queries
+DATA_ROOT = "../data"
+DATASET_NAME = "msmarco"  # Large dataset: 8.84M docs, 6,980 queries (dev) or 43 queries (test)
 
 # %% [markdown]
 # ## Import Dependencies
@@ -58,7 +69,7 @@ def download_beir_dataset(dataset_name: str, data_root: str) -> str:
     Download BEIR dataset and return the extracted path.
 
     Args:
-        dataset_name: Name of BEIR dataset (e.g., 'scifact', 'nfcorpus')
+        dataset_name: Name of BEIR dataset (e.g., 'msmarco', 'scifact', 'nfcorpus')
         data_root: Root directory to store datasets
 
     Returns:
@@ -77,13 +88,14 @@ dataset_path = download_beir_dataset(DATASET_NAME, DATA_ROOT)
 
 
 # %% Load Dataset
-def load_beir_data(data_path: str, split: str = "test"):
+def load_beir_data(data_path: str, split: str = "dev"):
     """
     Load BEIR dataset components.
 
     Args:
         data_path: Path to dataset directory
         split: Dataset split ('train', 'dev', 'test')
+               For MS MARCO: 'dev' has 6,980 queries, 'test' has 43 queries (TREC-DL 2019)
 
     Returns:
         Tuple of (corpus, queries, qrels)
@@ -92,28 +104,28 @@ def load_beir_data(data_path: str, split: str = "test"):
     return corpus, queries, qrels
 
 
-corpus, queries, qrels = load_beir_data(dataset_path, split="test")
+corpus, queries, qrels = load_beir_data(dataset_path, split="dev")  # Use 'dev' for 6,980 queries
 
 # %%
 # corpus is a dictionary of corpus_id to a dictionary of title and text
-# example: {'167944455': {'title': 'Microstructural development of human newborn cerebral white matter assessed in vivo by diffusion tensor magnetic resonance imaging.', 'text': 'Alterations of the architecture of cerebral white matter in the developing human brain can affect cortical development and result in functional disabilities. A line scan diffusion-weighted magnetic re...'}}
+# example: {'text': 'The presence of communication amid scientific minds was equally important to the success of the Manhattan Project as scientific intellect was. The only cloud hanging over the impressive achievement of the atomic researchers and engineers is what their success truly meant; hundreds of thousands of innocent lives obliterated.', 'title': ''}
 
-corpus["167944455"]["text"][:100]
+list(corpus.items())[0]
 
 # %%
-# queries is a dictionary of query_id to a dictionary of query_text
-# example: {'31715818': 1}
-# '31715818' is the corpus_id
-# 1 means relevant
+# queries is a dictionary of query_id to query text
+# example: {'19335': 'anthropological definition of environment'}
 
-queries["1"]
+list(queries.items())[0]
+
 # %%
 # qrels is a dictionary of query_id to a dictionary of corpus_id to relevance score
-# example: {'31715818': {'31715818': 1}}
-# '31715818' is the corpus_id
-# 1 means relevant
+# example: {'19335': {'1017759': 0, '1082489': 0, '109063': 0, .... '1720395': 1, '1722': 0, '1725697': 0, '1726': 0, '1729': 2, '1730': 0, '1731': 0, '1732': 0, '1733': 0, '1734': 0, '1735': 0, '1736': 0,}
 
-qrels["1"]
+# MS MARCO uses graded relevance: 0 (not relevant), 1 (relevant), 2 (highly relevant)
+# This allows nuanced evaluation beyond binary relevant/non-relevant
+
+list(qrels.items())[0]
 
 # %% [markdown]
 # ## Display Sample Documents from Corpus
@@ -241,3 +253,176 @@ def create_qrels_dataframe(qrels: dict) -> pd.DataFrame:
 
 
 qrels_df = create_qrels_dataframe(qrels)
+
+# %% [markdown]
+# ## Create 1M Document Subset (for faster experimentation)
+#
+# For faster iteration and experimentation, we create a 1M document subset while preserving
+# **all relevant documents** from qrels to maintain benchmark integrity.
+#
+# **Strategy**:
+# 1. Keep ALL documents that appear in qrels (relevant docs)
+# 2. Randomly sample additional documents to reach 1M total
+# 3. All queries and qrels remain unchanged - benchmark results are still valid
+
+
+# %% Create Corpus Subset
+def create_corpus_subset(
+    corpus: dict, qrels: dict, target_size: int = 1_000_000, seed: int = 42
+):
+    """
+    Create a subset of corpus while preserving all relevant documents.
+
+    Args:
+        corpus: Full corpus dictionary
+        qrels: Relevance judgments
+        target_size: Target corpus size
+        seed: Random seed for reproducibility
+
+    Returns:
+        Subset corpus dictionary
+    """
+    import random
+
+    random.seed(seed)
+
+    # Collect all relevant document IDs from qrels
+    relevant_doc_ids = set()
+    for query_id, doc_relevances in qrels.items():
+        relevant_doc_ids.update(doc_relevances.keys())
+
+    print(f"\n{'=' * 80}")
+    print(f"CREATING CORPUS SUBSET")
+    print(f"{'=' * 80}\n")
+    print(f"Original corpus size: {len(corpus):,}")
+    print(f"Relevant documents (from qrels): {len(relevant_doc_ids):,}")
+    print(f"Target subset size: {target_size:,}")
+
+    # If target is larger than corpus, return full corpus
+    if target_size >= len(corpus):
+        print(f"\nTarget size >= corpus size. Returning full corpus.")
+        return corpus
+
+    # Sample additional documents to reach target size
+    all_doc_ids = set(corpus.keys())
+    non_relevant_ids = list(all_doc_ids - relevant_doc_ids)
+    additional_needed = target_size - len(relevant_doc_ids)
+
+    if additional_needed > 0:
+        sampled_additional = random.sample(
+            non_relevant_ids, min(additional_needed, len(non_relevant_ids))
+        )
+    else:
+        sampled_additional = []
+
+    # Create subset corpus
+    subset_doc_ids = relevant_doc_ids | set(sampled_additional)
+    subset_corpus = {doc_id: corpus[doc_id] for doc_id in subset_doc_ids}
+
+    print(f"\nSubset created:")
+    print(f"  Total documents: {len(subset_corpus):,}")
+    print(f"  Relevant docs (preserved): {len(relevant_doc_ids):,} (100%)")
+    print(f"  Additional sampled docs: {len(sampled_additional):,}")
+
+    # Verify benchmark integrity
+    missing_docs = 0
+    for query_id, doc_relevances in qrels.items():
+        for doc_id in doc_relevances.keys():
+            if doc_id not in subset_doc_ids:
+                missing_docs += 1
+
+    print(f"\nBenchmark integrity check:")
+    print(f"  Missing relevant docs: {missing_docs} (should be 0)")
+    print(
+        f"  Benchmark valid: {'✓ YES' if missing_docs == 0 else '✗ NO - DO NOT USE'}"
+    )
+
+    return subset_corpus
+
+
+# Create 1M subset
+corpus_subset = create_corpus_subset(corpus, qrels, target_size=1_000_000)
+
+# %% [markdown]
+# ## Save Subset to Disk (Optional)
+#
+# Save the subset corpus for reuse without regenerating
+
+
+# %% Save Subset Corpus
+def save_corpus_subset(corpus_subset: dict, dataset_path: str, suffix: str = "1M"):
+    """
+    Save corpus subset to disk in BEIR format.
+
+    Args:
+        corpus_subset: Subset corpus dictionary
+        dataset_path: Path to dataset directory
+        suffix: Suffix for subset file (e.g., '1M')
+    """
+    import json
+    from pathlib import Path
+
+    # Create subsets directory
+    subsets_dir = Path(dataset_path) / "subsets"
+    subsets_dir.mkdir(exist_ok=True)
+
+    output_file = subsets_dir / f"corpus_{suffix}.jsonl"
+
+    print(f"\nSaving corpus subset to: {output_file}")
+
+    with open(output_file, "w") as f:
+        for doc_id, doc_data in corpus_subset.items():
+            record = {
+                "_id": doc_id,
+                "title": doc_data.get("title", ""),
+                "text": doc_data["text"],
+                "metadata": doc_data.get("metadata", {}),
+            }
+            f.write(json.dumps(record) + "\n")
+
+    file_size_mb = output_file.stat().st_size / (1024 * 1024)
+    print(f"Saved {len(corpus_subset):,} documents ({file_size_mb:.1f} MB)")
+
+    return str(output_file)
+
+
+# Save the subset
+subset_path = save_corpus_subset(corpus_subset, dataset_path, suffix="1M")
+
+# %% [markdown]
+# ## Verify Subset Statistics
+
+
+# %% Show Subset Statistics
+def show_subset_statistics(
+    original_corpus: dict, subset_corpus: dict, queries: dict, qrels: dict
+):
+    """Compare original and subset corpus statistics."""
+    print(f"\n{'=' * 80}")
+    print(f"SUBSET COMPARISON")
+    print(f"{'=' * 80}\n")
+
+    print(f"Corpus Size:")
+    print(f"  Original: {len(original_corpus):,}")
+    print(f"  Subset:   {len(subset_corpus):,}")
+    print(
+        f"  Reduction: {(1 - len(subset_corpus)/len(original_corpus))*100:.1f}%"
+    )
+
+    print(f"\nQueries & Qrels:")
+    print(f"  Queries: {len(queries):,} (unchanged)")
+    print(f"  Qrels: {sum(len(docs) for docs in qrels.values()):,} (unchanged)")
+
+    # Calculate coverage of relevant docs
+    relevant_doc_ids = set()
+    for doc_relevances in qrels.values():
+        relevant_doc_ids.update(doc_relevances.keys())
+
+    coverage = len(relevant_doc_ids & set(subset_corpus.keys()))
+    print(
+        f"\nRelevant Doc Coverage: {coverage}/{len(relevant_doc_ids)} ({coverage/len(relevant_doc_ids)*100:.1f}%)"
+    )
+
+
+
+show_subset_statistics(corpus, corpus_subset, queries, qrels)
