@@ -13,13 +13,13 @@ This experiment evaluates different vector search methods (Brute-force, HNSW, FA
 
 ### Performance Summary
 
-| Method | Implementation | Latency | Throughput | Recall@10 | Speedup vs Brute-Force |
-|--------|---------------|---------|------------|-----------|------------------------|
-| **Brute Force** | sklearn (unoptimized)* | 699.43 ms | 1.4 QPS | 0.8100 | 1x (baseline) |
-| **HNSWlib** | C++ with Python bindings | 0.44 ms | 2,275 QPS | 0.7583 (93.6%) | **1,591x faster** |
-| **FAISS HNSW** | IndexHNSWFlat | 0.08 ms | 11,805 QPS | 0.7683 (94.9%) | **8,257x faster** |
+| Method | Implementation | Latency | Throughput | Recall@10 | Speedup |
+|--------|---------------|---------|------------|-----------|---------|
+| **Brute Force** | sklearn (unoptimized)* | 699.43 ms | 1.4 QPS | 0.8100 | 1x |
+| **HNSWlib** | C++ with Python bindings | 0.46 ms | 2,166 QPS | 0.7433 (91.8%) | 1,515x |
+| **FAISS HNSW** | IndexHNSWFlat | 0.08 ms | 11,805 QPS | 0.7683 (94.9%) | 8,257x |
 
-*Note: Brute force uses unoptimized sklearn cosine_similarity. Production implementations would be faster but still O(n).
+*Note: All methods tested with M=32, ef_construction=100, ef_search=50 (where applicable). Brute force uses unoptimized sklearn cosine_similarity.
 
 ### Visualizations
 
@@ -59,7 +59,7 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
 - **Source**: MS MARCO passage ranking (dev split)
 - **Corpus**: 1,000,000 documents (intelligent subset from 8.8M full corpus)
   - **Strategy**: Preserves ALL 7,437 relevant documents from qrels + ~992K randomly sampled documents
-  - **Why subset?** 8.8x faster (16 mins vs 2.5 hours) while maintaining benchmark validity
+  - **Why subset?** Faster embedding generation for quick testing while preserving all relevant documents
   - **Benchmark integrity**: 100% of relevant documents preserved, metrics remain valid
 - **Queries**: 100 dev queries (sampled from 6,980 total)
 - **Embeddings**: 384-dimensional vectors (sentence-transformers/all-MiniLM-L6-v2)
@@ -74,10 +74,10 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
    - Baseline: 0.81 Recall@10, 699.43ms latency
 
 2. **HNSWlib**
-   - **Parameters**: M=16, ef_construction=100, ef_search=50
+   - **Parameters**: M=32, ef_construction=100, ef_search=50
    - Hierarchical navigable small world graphs
-   - **Results**: 0.7583 Recall@10 (93.6% of brute-force), 0.44ms latency
-   - **Index build**: 375.7s (~6.3 minutes)
+   - **Results**: 0.7433 Recall@10 (91.8% of brute-force), 0.46ms latency
+   - **Index build**: 512.8s (~8.5 minutes)
 
 3. **FAISS HNSW**
    - **Implementation**: faiss.IndexHNSWFlat (optimized C++ with SIMD)
