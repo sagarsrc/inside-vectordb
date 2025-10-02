@@ -1,0 +1,52 @@
+================================================================================
+VECTOR SEARCH BENCHMARK COMPARISON
+================================================================================
+
+DATASET:
+  Dataset: msmarco
+  Corpus size: 1,000,000 documents
+  Queries: 100 test queries
+  Embedding dimension: 384
+
+METHODS COMPARED:
+
+1. BRUTE_FORCE
+   Parameters: exact
+   Search latency: 699.43 ms/query
+   Throughput: 1.4 QPS
+   Recall@10: 0.8100
+   MRR: 0.6253
+
+2. HNSWLIB
+   Parameters: M=16, ef_c=100, ef_s=50
+   Search latency: 0.44 ms/query
+   Throughput: 2274.8 QPS
+   Recall@10: 0.7583
+   MRR: 0.5072
+   Build time: 6.3 minutes
+
+3. FAISS
+   Parameters: M=32, ef_c=100, ef_s=50
+   Search latency: 0.08 ms/query
+   Throughput: 11805.0 QPS
+   Recall@10: 0.7683
+   MRR: 0.5101
+   Build time: 6.3 minutes
+
+SPEEDUP ANALYSIS:
+
+hnswlib:
+  1591.1x faster than brute force
+  Recall: 93.6% of brute force quality
+
+faiss:
+  8256.8x faster than brute force
+  Recall: 94.9% of brute force quality
+
+KEY FINDINGS:
+
+ Fastest search: faiss (0.08 ms/query)
+ Best recall: brute_force (0.8100)
+ Highest throughput: faiss (11805 QPS)
+
+================================================================================
