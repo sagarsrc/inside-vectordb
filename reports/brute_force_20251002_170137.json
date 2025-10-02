@@ -1,0 +1,30 @@
+{
+  "method": "brute_force",
+  "timestamp": "2025-10-02 17:01:37",
+  "performance": {
+    "total_search_time_seconds": 0.13318037500721402,
+    "avg_query_time_seconds": 0.0026636075001442803,
+    "avg_query_time_ms": 2.6636075001442805,
+    "queries_per_second": 375.4306893736531
+  },
+  "recall": {
+    "1": 0.5589999999999999,
+    "5": 0.8420000000000001,
+    "10": 0.872,
+    "20": 0.9159999999999999,
+    "50": 0.92
+  },
+  "precision": {
+    "1": 0.6,
+    "5": 0.19599999999999998,
+    "10": 0.102
+  },
+  "mrr": 0.7071764705882353,
+  "metadata": {
+    "dataset": "scifact",
+    "n_corpus_docs": 5183,
+    "n_queries": 50,
+    "embedding_dimension": 384,
+    "top_k_retrieved": 50
+  }
+}
