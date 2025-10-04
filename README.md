@@ -53,6 +53,11 @@ Both HNSW and FAISS require ~6 minutes to build indices for 1M documents - a one
 
 Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off.
 
+#### Layer Distribution Analysis
+![Layer Distribution](reports/summary/layer_distribution_histograms.png)
+
+HNSW assigns nodes to hierarchical layers using the formula `floor(-ln(U) * mL)` where mL = 1/ln(M). Higher M values create flatter hierarchies with more nodes in the base layer, while lower M values create taller structures. This probabilistic assignment creates the skip-list-like structure that enables efficient logarithmic search.
+
 ## Experiment Setup
 
 ### Dataset
@@ -125,6 +130,11 @@ Tuning `ef_search` allows fine-grained control over the speed-accuracy trade-off
    - Aggregates results from all methods
    - Generates comparison plots
    - Creates summary report
+
+7. **[006-layer_assignment.py](notebooks/006-layer_assignment.py)**
+   - Analyzes HNSW layer distribution across different M values
+   - Visualizes hierarchical structure
+   - Demonstrates impact of M parameter on graph topology
 
 ## Installation & Setup
 
